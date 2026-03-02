@@ -61,8 +61,7 @@ canvas{width:100%!important}
 const SHEET_ID = "1l4jjW4zdEVTOis2OTGWSiDfWpBzPWHuqnAz-Vfxcpmg";   // ← PEGA AQUÍ TU SHEET ID
 const SHEET_RANGE = "A1:O10500";        // Columnas A-O, hasta ~10.000 filas (7 días)
 
-// Estado de configuración
-const CONFIG_OK = SHEET_ID !== "TU_SHEET_ID_AQUI";
+const CONFIG_OK = true; // Forzamos a true porque el ID ya está puesto
 
 // Caché local con timestamp para no recargar demasiado
 let _cacheVelas = [];
@@ -146,7 +145,13 @@ function cargarDesdeSheets() {
     // Inyectar script JSONP — esto sí funciona desde file://
     const script = document.createElement("script");
     script.id = cbName;
-    script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;handler:${cbName}&sheet=Hoja 1`;
+    // ESTA ES LA LÍNEA CORREGIDA:
+    // 1. Usamos comillas invertidas ``
+    // 2. Usamos la variable ${SHEET_ID} para que sea más limpio
+    // 3. Usamos encodeURIComponent para que el espacio de "Hoja 1" no rompa la URL
+    const nombreHoja = "Hoja 1"; 
+    script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;handler=${cbName}&sheet=${encodeURIComponent(nombreHoja)}`;
+    
     script.onerror = () => {
       clearTimeout(timer);
       delete window[cbName];
