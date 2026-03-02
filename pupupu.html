@@ -146,7 +146,7 @@ function cargarDesdeSheets() {
     // Inyectar script JSONP — esto sí funciona desde file://
     const script = document.createElement("script");
     script.id = cbName;
-    script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;handler:${cbName}&sheet=Hoja1`;
+    script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;handler:${cbName}&sheet=Hoja 1`;
     script.onerror = () => {
       clearTimeout(timer);
       delete window[cbName];
