@@ -79,9 +79,8 @@ async function cargarDesdeSheets() {
     return _cacheVelas;
   }
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${SHEET_RANGE}?key=AIzaSyD-no-key-needed-for-public`;
-  // API pública (sheet compartido como "cualquiera puede ver")
-  const nombreHoja = "Hoja 1"; 
-    script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;handler=${cbName}&sheet=${encodeURIComponent(nombreHoja)}`;
+  // API pública (sheet compartido como "cualquiera puede ver") 
+  script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;handler:${cbName}&sheet=Hoja%201`;
   const r = await fetch(urlPublic);
   if (!r.ok) throw new Error("Error leyendo Sheets: " + r.status);
   const csv = await r.text();
