@@ -58,11 +58,11 @@ canvas{width:100%!important}
 // 2. Copia el SHEET_ID que aparece en la Celda 4
 // 3. Pégalo abajo donde dice TU_SHEET_ID_AQUI
 // ============================================================
-const SHEET_ID = "TU_SHEET_ID_AQUI";   // ← PEGA AQUÍ TU SHEET ID
+const SHEET_ID = "1l4jjW4zdEVTOis2OTGWSiDfWpBzPWHuqnAz-Vfxcpmg";   // ← PEGA AQUÍ TU SHEET ID
 const SHEET_RANGE = "A1:O10500";        // Columnas A-O, hasta ~10.000 filas (7 días)
 
 // Estado de configuración
-const CONFIG_OK = SHEET_ID !== "TU_SHEET_ID_AQUI";
+const CONFIG_OK = SHEET_ID !== "1l4jjW4zdEVTOis2OTGWSiDfWpBzPWHuqnAz-Vfxcpmg";
 
 // Caché local con timestamp para no recargar demasiado
 let _cacheVelas = [];
@@ -560,7 +560,7 @@ function render(){
     </div></div>
   ${!CONFIG_OK?`<div style="background:#1e1a00;border-bottom:2px solid var(--yellow);padding:10px 16px;font-size:12px;color:var(--yellow)">
     ⚙️ <strong>Configura el Sheet ID:</strong> Abre este HTML con un editor de texto (Notepad, VS Code...), 
-    busca <code style="background:#0a0e17;padding:2px 6px;border-radius:4px">TU_SHEET_ID_AQUI</code> 
+    busca <code style="background:#0a0e17;padding:2px 6px;border-radius:4px">1l4jjW4zdEVTOis2OTGWSiDfWpBzPWHuqnAz-Vfxcpmg</code> 
     y reemplázalo por el ID que aparece en la Celda 4 del Colector de Colab.
     Luego guarda el HTML y recárgalo.
   </div>`:""}
