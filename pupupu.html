@@ -58,7 +58,7 @@ canvas{width:100%!important}
 // 2. Copia el SHEET_ID que aparece en la Celda 4
 // 3. Pégalo abajo donde dice TU_SHEET_ID_AQUI
 // ============================================================
-const SHEET_ID = "1l4jjW4zdEVTOis2OTGWSiDfWpBzPWHuqnAz-Vfxcpmg";   // ← PEGA AQUÍ TU SHEET ID
+const SHEET_ID = "TU_SHEET_ID_AQUI";   // ← PEGA AQUÍ TU SHEET ID
 const SHEET_RANGE = "A1:O10500";        // Columnas A-O, hasta ~10.000 filas (7 días)
 
 // Estado de configuración
@@ -69,49 +69,92 @@ let _cacheVelas = [];
 let _cacheTs = 0;
 const CACHE_TTL_MS = 55000; // refresca si han pasado más de 55s
 
-async function cargarDesdeSheets() {
-  if (!CONFIG_OK) {
-    console.warn("⚠️ SHEET_ID no configurado");
-    return [];
-  }
-  // Si el caché es reciente, usarlo
-  if (_cacheVelas.length && (Date.now() - _cacheTs) < CACHE_TTL_MS) {
-    return _cacheVelas;
-  }
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${SHEET_RANGE}?key=AIzaSyD-no-key-needed-for-public`;
-  // API pública (sheet compartido como "cualquiera puede ver") 
-  script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;handler:${cbName}&sheet=Hoja%201`;
-  const r = await fetch(urlPublic);
-  if (!r.ok) throw new Error("Error leyendo Sheets: " + r.status);
-  const csv = await r.text();
-  const lineas = csv.trim().split("\n");
-  if (lineas.length < 2) return [];
-  // Saltar cabecera
-  const velas = [];
-  for (let i = 1; i < lineas.length; i++) {
-    const cols = lineas[i].split(",").map(c => c.replace(/^"|"$/g, "").trim());
-    if (cols.length < 6 || !cols[0]) continue;
-    velas.push({
-      timestamp:      cols[0],
-      open:           parseFloat(cols[1]) || 0,
-      high:           parseFloat(cols[2]) || 0,
-      low:            parseFloat(cols[3]) || 0,
-      close:          parseFloat(cols[4]) || 0,
-      volume:         parseFloat(cols[5]) || 0,
-      ema15:          cols[6]  ? parseFloat(cols[6])  : undefined,
-      ema_slope:      cols[7]  ? parseFloat(cols[7])  : undefined,
-      vwap:           cols[8]  ? parseFloat(cols[8])  : undefined,
-      vwap_dist_p:    cols[9]  ? parseFloat(cols[9])  : undefined,
-      vwap_dir:       cols[10] || undefined,
-      rsi_14:         cols[11] ? parseFloat(cols[11]) : undefined,
-      vol_relativo:   cols[12] ? parseFloat(cols[12]) : undefined,
-      cuerpo_vela_p:  cols[13] ? parseFloat(cols[13]) : undefined,
-      pivot_confirmed:cols[14] ? parseInt(cols[14])   : 0,
-    });
-  }
-  _cacheVelas = velas;
-  _cacheTs = Date.now();
-  return velas;
+// Carga datos via JSONP — funciona desde file://, móvil y cualquier servidor
+// La API gviz de Google Sheets permite callback JSONP sin restricción CORS
+function cargarDesdeSheets() {
+  return new Promise((resolve, reject) => {
+    if (!CONFIG_OK) { reject(new Error("SHEET_ID no configurado")); return; }
+
+    // Caché: si los datos son recientes, devolverlos sin nueva petición
+    if (_cacheVelas.length && (Date.now() - _cacheTs) < CACHE_TTL_MS) {
+      resolve(_cacheVelas); return;
+    }
+
+    // Nombre único para el callback para evitar colisiones si se llama varias veces
+    const cbName = "gpq_cb_" + Date.now();
+
+    // Timeout de seguridad: si en 15s no responde, rechazar
+    const timer = setTimeout(() => {
+      delete window[cbName];
+	  const sEl = document.getElementById(cbName);
+      if (sEl) sEl.remove();
+      reject(new Error("Timeout leyendo Google Sheets (15s)"));
+    }, 15000);
+
+    // Google llama a esta función con los datos cuando el script carga
+    window[cbName] = function(resp) {
+      clearTimeout(timer);
+      delete window[cbName];
+      const s = document.getElementById(cbName);
+      if (s) s.remove();
+      try {
+        const tabla = resp.table;
+        if (!tabla || !tabla.rows) { resolve([]); return; }
+
+        // Fila 0 son las cabeceras, desde fila 1 son datos
+        const velas = [];
+        for (const fila of tabla.rows) {
+          const c = fila.c;
+          if (!c || !c[0] || !c[0].v) continue;
+          // gviz devuelve fechas como "Date(2024,0,15,10,30,0)" — las convertimos
+          function gv(i) { return (c[i] && c[i].v != null) ? c[i].v : null; }
+          function gf(i) { const v = gv(i); return v != null ? parseFloat(v) : undefined; }
+          function gi(i) { const v = gv(i); return v != null ? parseInt(v) : 0; }
+          // El timestamp viene como string desde Sheets
+          let ts = gv(0);
+          // Si viene como objeto Date de gviz, convertirlo
+          if (typeof ts === "object" && ts !== null) {
+            ts = new Date(ts).toISOString().slice(0,19).replace("T"," ");
+          }
+          if (!ts || typeof ts !== "string") continue;
+          velas.push({
+            timestamp:       ts,
+            open:            gf(1)  || 0,
+            high:            gf(2)  || 0,
+            low:             gf(3)  || 0,
+            close:           gf(4)  || 0,
+            volume:          gf(5)  || 0,
+            ema15:           gf(6),
+            ema_slope:       gf(7),
+            vwap:            gf(8),
+            vwap_dist_p:     gf(9),
+            vwap_dir:        gv(10),
+            rsi_14:          gf(11),
+            vol_relativo:    gf(12),
+            cuerpo_vela_p:   gf(13),
+            pivot_confirmed: gi(14),
+          });
+        }
+        _cacheVelas = velas;
+        _cacheTs = Date.now();
+        resolve(velas);
+      } catch(e) {
+        reject(new Error("Error parseando datos de Sheets: " + e.message));
+      }
+    };
+
+    // Inyectar script JSONP — esto sí funciona desde file://
+    const script = document.createElement("script");
+    script.id = cbName;
+    script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;handler:${cbName}&sheet=Hoja%201`;
+    script.async = true;
+	script.onerror = () => {
+      clearTimeout(timer);
+      delete window[cbName];
+      reject(new Error("No se pudo conectar con Google Sheets. ¿Tienes internet?"));
+    };
+    document.head.appendChild(script);
+  });
 }
 
 // Compatibilidad: save no hace nada (los datos viven en Sheets)
