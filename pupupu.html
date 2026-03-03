@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>PUPUPU PRO v12</title>
+<title>PUPUPU PRO v13</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--green:#10b981;--red:#ef4444;--yellow:#f59e0b;--blue:#3b82f6;--purple:#8b5cf6;--text:#e2e8f0;--muted:#64748b}
@@ -51,7 +51,7 @@ canvas{width:100%!important}
 <div id="app"></div>
 <script>
 // ============================================================
-// PUPUPU PRO v9 — Fuente de datos: Google Sheets
+// PUPUPU PRO v13 — Fuente de datos: Google Sheets
 // ============================================================
 // INSTRUCCIONES DE CONFIGURACIÓN:
 // 1. Corre el notebook PUPUPU_Colector.ipynb en Google Colab
@@ -171,7 +171,16 @@ function detect(velas,cd=5){
     if(d==="LONG"){sl=plp*.999;r=Math.abs(pi-sl);tp=pi+r;cv=vr.vwap?vr.close<vr.vwap:null}
     else{sl=php*1.001;r=Math.abs(sl-pi);tp=pi-r;cv=vr.vwap?vr.close>vr.vwap:null}
     if(d==="LONG"&&vr.high>=tp)continue;if(d==="SHORT"&&vr.low<=tp)continue;
-    sen.push({ts:vr.timestamp,tsCruce:v.timestamp,dir:d,precioIn:pi,sl,tp11:tp,riesgo:r,riesgoP:pi>0?(r/pi)*100:0,vwap:vr.vwap,cumpleVwap:cv,esIntencion:(v.cuerpo_vela_p||0)<.05,distPivEmaP:Math.abs(pp-pi)/pi*100,idx:ri,idxCruce:i,retesteoVelas:ri-i});
+    const riesgoP=pi>0?(r/pi)*100:0;
+    // ── FILTROS VALIDADOS ESTADÍSTICAMENTE ──────────────────────────────────
+    // 1. minRp: SL mínimo para que fees no sean prohibitivas
+    if(S.filtros.minRp>0&&riesgoP<S.filtros.minRp)continue;
+    // 2. vol_relativo: cruce sin volumen = ruido
+    if(S.filtros.minVol>0&&(vr.vol_relativo==null||vr.vol_relativo<S.filtros.minVol))continue;
+    // 3. Franja horaria: solo operar en horas de liquidez
+    if(S.filtros.soloHorario){const h=new Date(vr.timestamp+"Z").getUTCHours();if(h<7||h>=21)continue;}
+    // ────────────────────────────────────────────────────────────────────────
+    sen.push({ts:vr.timestamp,tsCruce:v.timestamp,dir:d,precioIn:pi,sl,tp11:tp,riesgo:r,riesgoP,vwap:vr.vwap,cumpleVwap:cv,esIntencion:(v.cuerpo_vela_p||0)<.05,distPivEmaP:Math.abs(pp-pi)/pi*100,idx:ri,idxCruce:i,retesteoVelas:ri-i,volRelativo:vr.vol_relativo});
     ut=ta;i=ri;
   }
   return sen;
@@ -374,6 +383,11 @@ function simCuenta(rawOps,cap,rPct,est,tp05mode,useFees,maxSim){
   let active=[];
   for(let i=0;i<rawOps.length;i++){
     const op=rawOps[i],s=op.estrategias?.[est];if(!s)continue;
+    // ── FILTROS VALIDADOS ────────────────────────────────────────────────────
+    if(S.filtros.minRp>0&&op.riesgoP<S.filtros.minRp)continue;
+    if(S.filtros.minVol>0&&(op.volRelativo==null||op.volRelativo<S.filtros.minVol))continue;
+    if(S.filtros.soloHorario){const h=new Date(op.ts+"Z").getUTCHours();if(h<7||h>=21)continue;}
+    // ────────────────────────────────────────────────────────────────────────
     // Limpiar activas que ya cerraron antes de esta entrada
     active=active.filter(ts=>ts>op.ts);
     if(ms>0&&active.length>=ms)continue;
@@ -408,93 +422,11 @@ function exportar(){
 }
 function dlJson(j){const b=new Blob([j],{type:"application/json"}),u=URL.createObjectURL(b),a=document.createElement("a");a.href=u;a.download="pupupu_export_"+new Date().toISOString().slice(0,10)+".json";document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(u)}
 
-// ─── GUARDAR OPERACIONES EN GOOGLE SHEETS ───────────────────────────────────
-// APPS_SCRIPT_URL: pega aquí la URL de tu Google Apps Script Web App
-// Instrucciones: ver comentario al final del archivo
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxIp2UKVZQknDmqqNnHPYMv9eCptAjZk-cLJlJvLncATp8-nSXxOMb-NraWG7KuwlP6IA/exec";
-
-async function guardarEnSheets() {
-  if (APPS_SCRIPT_URL === "TU_APPS_SCRIPT_URL_AQUI") {
-    alert("⚠️ Configura APPS_SCRIPT_URL en el HTML.\nVer instrucciones al final del archivo.");
-    return;
-  }
-  if (!S.ops || S.ops.length === 0) {
-    alert("No hay operaciones para guardar.");
-    return;
-  }
-
-  const btn = document.getElementById("xSave");
-  if (btn) { btn.disabled = true; btn.textContent = "Guardando..."; }
-
-  // Construir filas: una por operación x estrategia
-  const ESTS_LIST = ["TP_FIJO","BE_Y_CORRER","RATIO_LINEAL","RATIO_NO_LINEAL","CRUCE_EMA12","PIVOTE_CONFIRMADO","MIXTA"];
-  const filas = [];
-  const guardadoEn = new Date().toISOString().slice(0,19).replace("T"," ");
-
-  for (const o of S.ops) {
-    // Aplicar filtros activos
-    if (o.riesgoP < S.minRp) continue;
-    if (Math.abs(o.distPivEmaP) > S.maxPiv) continue;
-
-    for (const est of ESTS_LIST) {
-      const r = o.estrategias?.[est];
-      if (!r) continue;
-      filas.push([
-        guardadoEn,
-        S.par,
-        o.ts,
-        o.tsCruce || o.ts,
-        o.dir,
-        Math.round(o.precioIn * 100) / 100,
-        Math.round(o.sl * 100) / 100,
-        Math.round(o.tp11 * 100) / 100,
-        Math.round(o.riesgoP * 1000) / 1000,
-        Math.round(o.distPivEmaP * 1000) / 1000,
-        o.mfe ?? "",
-        o.mae ?? "",
-        o.cumpleVwap ? 1 : 0,
-        o.esIntencion ? 1 : 0,
-        o.retesteoVelas || 0,
-        est,
-        r.ratio ?? "",
-        r.m ?? "",
-        r.ts ?? "",
-        r.ps ?? "",
-        S.capital,
-        S.riesgo,
-        S.fees ? 1 : 0,
-        S.maxSim
-      ]);
-    }
-  }
-
-  if (filas.length === 0) {
-    alert("No hay operaciones tras aplicar los filtros actuales.");
-    if (btn) { btn.disabled = false; btn.textContent = "💾 Sheets"; }
-    return;
-  }
-
-  try {
-    await fetch(APPS_SCRIPT_URL, {
-      method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ filas })
-    });
-    // Con no-cors no podemos leer la respuesta, pero los datos llegan
-    alert(`✅ ${filas.length} filas enviadas a PUPUPU_Ops\n(Verifica en Google Sheets que aparecieron)`);
-  } catch (e) {
-    alert("❌ Error de red: " + e.message);
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "💾 Sheets"; }
-  }
-}
-// ─────────────────────────────────────────────────────────────────────────────
-
 // STATE
 const ESTS=["TP_FIJO","BE_Y_CORRER","RATIO_LINEAL","RATIO_NO_LINEAL","CRUCE_EMA12","PIVOTE_CONFIRMADO","MIXTA"];
 const EST_NEEDS_BE={"TP_FIJO":false,"BE_Y_CORRER":"optional","RATIO_LINEAL":"required","RATIO_NO_LINEAL":"required","CRUCE_EMA12":"optional","PIVOTE_CONFIRMADO":"optional","MIXTA":"required"};
-let S={datos:load(),par:"BTCUSDT",horas:8,est:"TP_FIJO",riesgo:2,capital:1000,tab:"cuenta",loading:false,error:null,senales:[],ops:[],lastUpdate:null,selOp:null,tp05:false,beRatio:1,fees:false,maxSim:4};
+let S={datos:load(),par:"BTCUSDT",horas:8,est:"TP_FIJO",riesgo:2,capital:1000,tab:"cuenta",loading:false,error:null,senales:[],ops:[],lastUpdate:null,selOp:null,tp05:false,beRatio:1,fees:false,maxSim:4,
+  filtros:{minRp:0.28,minVol:0.8,soloHorario:true}};
 
 function proc(){try{if(S.datos.velas.length>20){S.datos.velas=cAll(S.datos.velas);S.senales=detect(S.datos.velas);S.ops=S.senales.map(s=>({...s,...simOp(s,S.datos.velas,S.beRatio)}))}}catch(e){S.error="Proc: "+e.message}}
 function reSimOps(){S.ops=S.senales.map(s=>({...s,...simOp(s,S.datos.velas,S.beRatio)}))}
@@ -584,13 +516,12 @@ function render(){
   // Avg fee in R
   const avgFeeR=ops.length&&fees?ops.reduce((s,o)=>s+o.feeR,0)/ops.length:0;
 
-  let h=`<div class="hdr"><div style="display:flex;align-items:center;gap:10px"><span class="logo">PUPUPU PRO</span><span class="bdg">v12 | ${nv} velas | ${rawOps.length} sen | ${ops.length} ops${skipped?` (${skipped} skip)`:""}</span></div>
+  let h=`<div class="hdr"><div style="display:flex;align-items:center;gap:10px"><span class="logo">PUPUPU PRO</span><span class="bdg">v13 | ${nv} velas | ${rawOps.length} sen | ${ops.length} ops${skipped?` (${skipped} skip)`:""}</span></div>
     <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
       <select id="xPar">${PARES.map(p=>`<option value="${p}"${p===par?" selected":""}>${p.replace("USDT","")}</option>`).join("")}</select>
       <select id="xHrs">${[4,8,24,72,168].map(x=>`<option value="${x}"${x===S.horas?" selected":""}>${x<24?x+"h":x===24?"1d":x===72?"3d":"7d"}</option>`).join("")}</select>
       <button class="btn bp" id="xUpd"${loading?" disabled":""}>${loading?"...":"Actualizar"}</button>
       <button class="btn" id="xExp" style="background:var(--border);color:var(--muted)">Export</button>
-      <button class="btn" id="xSave" style="background:#1a3a2a;color:#4ade80;border:1px solid #4ade80">💾 Sheets</button>
     </div></div>
   ${!CONFIG_OK?`<div style="background:#1e1a00;border-bottom:2px solid var(--yellow);padding:10px 16px;font-size:12px;color:var(--yellow)">
     ⚙️ <strong>Configura el Sheet ID:</strong> Abre este HTML con un editor de texto (Notepad, VS Code...), 
@@ -599,13 +530,16 @@ function render(){
     Luego guarda el HTML y recárgalo.
   </div>`:""}
   ${error?`<div class="err">${error}</div>`:""}
-  ${lastUpdate?`<div class="si">Sheets ✓ | Ult:${lastUpdate} | TTL=2 | BE:${beRatio===0?"Off":beRatio+":1"} | MaxSim:${S.maxSim||"∞"} | Fees:${fees?"On":"Off"} | Auto:60s</div>`:""}
+  ${lastUpdate?`<div class="si">Sheets ✓ | Ult:${lastUpdate} | TTL=2 | BE:${beRatio===0?"Off":beRatio+":1"} | MaxSim:${S.maxSim||"∞"} | Fees:${fees?"On":"Off"} | minRp:${S.filtros.minRp} | Vol:${S.filtros.minVol} | ${S.filtros.soloHorario?"07-21h":"24h"} | Auto:60s</div>`:""}
   <div class="ctl">
     <label>Estr:<select id="xEst">${ESTS.map(e=>`<option value="${e}"${e===est?" selected":""}>${e.replace(/_/g," ")}</option>`).join("")}</select></label>
     <label>R:<select id="xRsg">${[1,2,3,5,10].map(r=>`<option value="${r}"${r===rsg?" selected":""}>${r}%</option>`).join("")}</select></label>
     <label>$:<input type="number" id="xCap" value="${cap}" style="width:55px"></label>
     ${beOpts.length?`<label>BE:<select id="xBE">${beOpts.map(([v,l])=>`<option value="${v}"${v===beRatio?" selected":""}>${l}</option>`).join("")}</select></label>`:""}
     <label>Sim:<select id="xSim">${[[1,"1"],[2,"2"],[3,"3"],[4,"4"],[0,"∞"]].map(([v,l])=>`<option value="${v}"${v===S.maxSim?" selected":""}>${l}</option>`).join("")}</select></label>
+    <label style="color:#4ade80">minRp:<input id="xMinRp" type="number" step="0.01" min="0" max="1" value="${S.filtros.minRp}" style="width:48px;background:var(--bg);color:#4ade80;border:1px solid #4ade80;border-radius:4px;padding:2px 4px;font-size:11px"></label>
+    <label style="color:#4ade80">Vol:<input id="xMinVol" type="number" step="0.1" min="0" max="5" value="${S.filtros.minVol}" style="width:40px;background:var(--bg);color:#4ade80;border:1px solid #4ade80;border-radius:4px;padding:2px 4px;font-size:11px"></label>
+    <div style="display:flex;align-items:center;gap:4px"><label style="position:relative;width:36px;height:20px;cursor:pointer"><input type="checkbox" id="xHorario"${S.filtros.soloHorario?" checked":""} style="opacity:0;width:0;height:0"><span style="position:absolute;top:0;left:0;right:0;bottom:0;background:${S.filtros.soloHorario?"#4ade80":"var(--border)"};border-radius:10px;transition:.2s"><span style="position:absolute;height:14px;width:14px;left:${S.filtros.soloHorario?"19px":"3px"};bottom:3px;background:#fff;border-radius:50%;transition:.2s"></span></span></label><span style="font-size:10px;color:${S.filtros.soloHorario?"#4ade80":"var(--muted)"}">07-21h</span></div>
     <div style="display:flex;align-items:center;gap:4px"><label style="position:relative;width:36px;height:20px;cursor:pointer"><input type="checkbox" id="x05"${tp05?" checked":""} style="opacity:0;width:0;height:0"><span style="position:absolute;top:0;left:0;right:0;bottom:0;background:${tp05?"var(--yellow)":"var(--border)"};border-radius:10px;transition:.2s"><span style="position:absolute;height:14px;width:14px;left:${tp05?"19px":"3px"};bottom:3px;background:#fff;border-radius:50%;transition:.2s"></span></span></label><span style="font-size:10px;color:${tp05?"var(--yellow)":"var(--muted)"}">TP.5</span></div>
     <div style="display:flex;align-items:center;gap:4px"><label style="position:relative;width:36px;height:20px;cursor:pointer"><input type="checkbox" id="xFee"${fees?" checked":""} style="opacity:0;width:0;height:0"><span style="position:absolute;top:0;left:0;right:0;bottom:0;background:${fees?"var(--red)":"var(--border)"};border-radius:10px;transition:.2s"><span style="position:absolute;height:14px;width:14px;left:${fees?"19px":"3px"};bottom:3px;background:#fff;border-radius:50%;transition:.2s"></span></span></label><span style="font-size:10px;color:${fees?"var(--red)":"var(--muted)"}">Fees</span></div>
     <div class="tabs">${["cuenta","grafico","tabla","detalle"].map(t=>`<button class="bt${tab===t?" a":""}" data-tab="${t}">${t==="cuenta"?"Cuenta":t==="grafico"?"Grafico":t==="tabla"?"Ops":"Detalle"}</button>`).join("")}</div>
@@ -732,7 +666,6 @@ function render(){
   // EVENTS
   document.getElementById("xUpd")?.addEventListener("click",exec);
   document.getElementById("xExp")?.addEventListener("click",exportar);
-  document.getElementById("xSave")?.addEventListener("click",guardarEnSheets);
   document.getElementById("xPar")?.addEventListener("change",e=>{S.par=e.target.value});
   document.getElementById("xHrs")?.addEventListener("change",e=>{S.horas=+e.target.value});
   document.getElementById("xEst")?.addEventListener("change",e=>{S.est=e.target.value;S.selOp=null;render()});
@@ -742,8 +675,11 @@ function render(){
   document.getElementById("xFee")?.addEventListener("change",e=>{S.fees=e.target.checked;render()});
   document.getElementById("xBE")?.addEventListener("change",e=>{S.beRatio=+e.target.value;reSimOps();render()});
   document.getElementById("xSim")?.addEventListener("change",e=>{S.maxSim=+e.target.value;render()});
-  document.getElementById("prevOp")?.addEventListener("click",()=>{if(S.selOp>0){S.selOp--;render()}});
+  document.getElementById("xMinRp")?.addEventListener("change",e=>{S.filtros.minRp=+e.target.value;proc();render()});
+  document.getElementById("xMinVol")?.addEventListener("change",e=>{S.filtros.minVol=+e.target.value;proc();render()});
+  document.getElementById("xHorario")?.addEventListener("change",e=>{S.filtros.soloHorario=e.target.checked;proc();render()});
   document.querySelectorAll("[data-tab]").forEach(b=>b.addEventListener("click",e=>{S.tab=e.target.dataset.tab;render()}));
+  document.getElementById("prevOp")?.addEventListener("click",()=>{if(S.selOp>0){S.selOp--;render()}});
   document.getElementById("nextOp")?.addEventListener("click",()=>{if(S.selOp<S.ops.length-1){S.selOp++;render()}});
   document.querySelectorAll("[data-opi]").forEach(r=>r.addEventListener("click",()=>{const i=+r.dataset.opi;S.selOp=i;S.tab="detalle";render();setTimeout(()=>document.getElementById("opD")?.scrollIntoView({behavior:"smooth",block:"start"}),100)}));
 
@@ -878,36 +814,3 @@ try{
 </script>
 </body>
 </html>
-<!--
-════════════════════════════════════════════════════════════════════
-  INSTRUCCIONES: CONFIGURAR GUARDAR EN GOOGLE SHEETS
-════════════════════════════════════════════════════════════════════
-
-PASO 1 — Crear el Apps Script
-  1. Abre tu Google Sheet "PUPUPU_Velas"
-  2. Menú: Extensiones → Apps Script
-  3. Borra todo el contenido y pega el código del archivo "pupupu_appscript.gs"
-  4. Guarda (Ctrl+S) con nombre: "PUPUPU Save Ops"
-
-PASO 2 — Publicar como Web App
-  1. Clic en "Implementar" → "Nueva implementación"
-  2. Tipo: "Aplicación web"
-  3. Ejecutar como: "Yo (tu email)"
-  4. Quién tiene acceso: "Cualquier usuario"
-  5. Clic "Implementar" → Autoriza los permisos
-  6. COPIA la URL que aparece (termina en /exec)
-
-PASO 3 — Pegar la URL en este HTML
-  1. Abre este archivo con un editor de texto
-  2. Busca: TU_APPS_SCRIPT_URL_AQUI
-  3. Reemplázala por la URL copiada
-
-PASO 4 — Columnas de PUPUPU_Ops (se crean automáticamente)
-  guardado_en | par | ts_entrada | ts_cruce | direccion | precio_entrada |
-  sl | tp_1_1 | riesgo_pct | dist_pivote_ema_pct | mfe_ratio_max | mae |
-  cumple_vwap | es_vela_intencion | retesteo_velas | estrategia |
-  ratio | motivo | ts_salida | precio_salida | capital | riesgo_sim |
-  fees | max_sim
-
-════════════════════════════════════════════════════════════════════
--->
