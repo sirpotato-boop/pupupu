@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>PUPUPU PRO v11</title>
+<title>PUPUPU PRO v12</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--green:#10b981;--red:#ef4444;--yellow:#f59e0b;--blue:#3b82f6;--purple:#8b5cf6;--text:#e2e8f0;--muted:#64748b}
@@ -411,7 +411,7 @@ function dlJson(j){const b=new Blob([j],{type:"application/json"}),u=URL.createO
 // ─── GUARDAR OPERACIONES EN GOOGLE SHEETS ───────────────────────────────────
 // APPS_SCRIPT_URL: pega aquí la URL de tu Google Apps Script Web App
 // Instrucciones: ver comentario al final del archivo
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxIp2UKVZQknDmqqNnHPYMv9eCptAjZk-cLJlJvLncATp8-nSXxOMb-NraWG7KuwlP6IA/exec";
+const APPS_SCRIPT_URL = "TU_APPS_SCRIPT_URL_AQUI";
 
 async function guardarEnSheets() {
   if (APPS_SCRIPT_URL === "TU_APPS_SCRIPT_URL_AQUI") {
@@ -475,17 +475,14 @@ async function guardarEnSheets() {
   }
 
   try {
-    const resp = await fetch(APPS_SCRIPT_URL, {
+    await fetch(APPS_SCRIPT_URL, {
       method: "POST",
+      mode: "no-cors",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ filas })
     });
-    const result = await resp.json();
-    if (result.status === "ok") {
-      alert(`✅ ${filas.length} filas guardadas en PUPUPU_Ops`);
-    } else {
-      alert("❌ Error: " + (result.error || "desconocido"));
-    }
+    // Con no-cors no podemos leer la respuesta, pero los datos llegan
+    alert(`✅ ${filas.length} filas enviadas a PUPUPU_Ops\n(Verifica en Google Sheets que aparecieron)`);
   } catch (e) {
     alert("❌ Error de red: " + e.message);
   } finally {
