@@ -414,12 +414,9 @@ function dlJson(j){const b=new Blob([j],{type:"application/json"}),u=URL.createO
 // STATE
 const ESTS=["TP_FIJO","BE_Y_CORRER","RATIO_LINEAL","RATIO_NO_LINEAL","CRUCE_EMA12","PIVOTE_CONFIRMADO","MIXTA"];
 const EST_NEEDS_BE={"TP_FIJO":false,"BE_Y_CORRER":"optional","RATIO_LINEAL":"required","RATIO_NO_LINEAL":"required","CRUCE_EMA12":"optional","PIVOTE_CONFIRMADO":"optional","MIXTA":"required"};
-let S={datos:load(),par:"BTCUSDT",horas:8,est:"TP_FIJO",riesgo:2,capital:1000,tab:"cuenta",loading:false,error:null,senales:[],ops:[],lastUpdate:null,selOp:null,tp05:false,beRatio:1,fees:false,maxSim:4};
+let S={datos:load(),par:"BTCUSDT",horas:8,est:"TP_FIJO",riesgo:2,capital:1000,tab:"cuenta",loading:false,error:null,senales:[],ops:[],lastUpdate:null,selOp:null,tp05:false,beRatio:1,fees:false,maxSim:4,minRp:0,maxPiv:99};
 
-function proc(){try{if(S.datos.velas.length>20){S.datos.velas=cAll(S.datos.velas);const minRp=parseFloat(document.getElementById("minRp")?.value)||0;
-const maxPiv=parseFloat(document.getElementById("maxPiv")?.value)||99;
-S.senales=detect(S.datos.velas,S.cd||5,minRp,maxPiv);S.ops=S.senales.map(s=>({...s,...simOp(s,S.datos.velas,S.beRatio)}))}}catch(e){S.error="Proc: "+e.message}}
-function reSimOps(){S.ops=S.senales.map(s=>({...s,...simOp(s,S.datos.velas,S.beRatio)}))}
+function proc(){try{if(S.datos.velas.length>20){S.datos.velas=cAll(S.datos.velas);S.senales=detect(S.datos.velas,S.cd||5,S.minRp,S.maxPiv);S.ops=S.senales.map(s=>({...s,...simOp(s,S.datos.velas,S.beRatio)}))}}catch(e){S.error="Proc: "+e.message}}
 async function exec(){
   S.loading=true;S.error=null;render();
   try{
@@ -527,8 +524,8 @@ function render(){
     <label>$:<input type="number" id="xCap" value="${cap}" style="width:55px"></label>
     ${beOpts.length?`<label>BE:<select id="xBE">${beOpts.map(([v,l])=>`<option value="${v}"${v===beRatio?" selected":""}>${l}</option>`).join("")}</select></label>`:""}
     <label>Sim:<select id="xSim">${[[1,"1"],[2,"2"],[3,"3"],[4,"4"],[0,"∞"]].map(([v,l])=>`<option value="${v}"${v===S.maxSim?" selected":""}>${l}</option>`).join("")}</select></label>
-    <label>Min R%:<input type="number" id="minRp" value="0" min="0" max="1" step="0.05" style="width:50px"></label>
-    <label>Max Piv%:<input type="number" id="maxPiv" value="99" min="0" max="99" step="0.05" style="width:50px"></label>
+    <label>Min R%:<input type="number" id="minRp" value="${S.minRp}" min="0" max="1" step="0.05" style="width:50px"></label>
+    <label>Max Piv%:<input type="number" id="maxPiv" value="${S.maxPiv}" min="0" max="99" step="0.05" style="width:50px"></label>
 	<div style="display:flex;align-items:center;gap:4px"><label style="position:relative;width:36px;height:20px;cursor:pointer"><input type="checkbox" id="x05"${tp05?" checked":""} style="opacity:0;width:0;height:0"><span style="position:absolute;top:0;left:0;right:0;bottom:0;background:${tp05?"var(--yellow)":"var(--border)"};border-radius:10px;transition:.2s"><span style="position:absolute;height:14px;width:14px;left:${tp05?"19px":"3px"};bottom:3px;background:#fff;border-radius:50%;transition:.2s"></span></span></label><span style="font-size:10px;color:${tp05?"var(--yellow)":"var(--muted)"}">TP.5</span></div>
     <div style="display:flex;align-items:center;gap:4px"><label style="position:relative;width:36px;height:20px;cursor:pointer"><input type="checkbox" id="xFee"${fees?" checked":""} style="opacity:0;width:0;height:0"><span style="position:absolute;top:0;left:0;right:0;bottom:0;background:${fees?"var(--red)":"var(--border)"};border-radius:10px;transition:.2s"><span style="position:absolute;height:14px;width:14px;left:${fees?"19px":"3px"};bottom:3px;background:#fff;border-radius:50%;transition:.2s"></span></span></label><span style="font-size:10px;color:${fees?"var(--red)":"var(--muted)"}">Fees</span></div>
     <div class="tabs">${["cuenta","grafico","tabla","detalle"].map(t=>`<button class="bt${tab===t?" a":""}" data-tab="${t}">${t==="cuenta"?"Cuenta":t==="grafico"?"Grafico":t==="tabla"?"Ops":"Detalle"}</button>`).join("")}</div>
@@ -667,6 +664,8 @@ function render(){
   document.querySelectorAll("[data-tab]").forEach(b=>b.addEventListener("click",e=>{S.tab=e.target.dataset.tab;render()}));
   document.getElementById("prevOp")?.addEventListener("click",()=>{if(S.selOp>0){S.selOp--;render()}});
   document.getElementById("nextOp")?.addEventListener("click",()=>{if(S.selOp<S.ops.length-1){S.selOp++;render()}});
+  document.getElementById("minRp")?.addEventListener("change",e=>{S.minRp=+e.target.value;proc();render()});
+  document.getElementById("maxPiv")?.addEventListener("change",e=>{S.maxPiv=+e.target.value;proc();render()});
   document.querySelectorAll("[data-opi]").forEach(r=>r.addEventListener("click",()=>{const i=+r.dataset.opi;S.selOp=i;S.tab="detalle";render();setTimeout(()=>document.getElementById("opD")?.scrollIntoView({behavior:"smooth",block:"start"}),100)}));
 
   // CHARTS
