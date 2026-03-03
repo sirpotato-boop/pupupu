@@ -584,7 +584,7 @@ function render(){
   // Avg fee in R
   const avgFeeR=ops.length&&fees?ops.reduce((s,o)=>s+o.feeR,0)/ops.length:0;
 
-  let h=`<div class="hdr"><div style="display:flex;align-items:center;gap:10px"><span class="logo">PUPUPU PRO</span><span class="bdg">v9 | ${nv} velas | ${rawOps.length} sen | ${ops.length} ops${skipped?` (${skipped} skip)`:""}</span></div>
+  let h=`<div class="hdr"><div style="display:flex;align-items:center;gap:10px"><span class="logo">PUPUPU PRO</span><span class="bdg">v12 | ${nv} velas | ${rawOps.length} sen | ${ops.length} ops${skipped?` (${skipped} skip)`:""}</span></div>
     <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
       <select id="xPar">${PARES.map(p=>`<option value="${p}"${p===par?" selected":""}>${p.replace("USDT","")}</option>`).join("")}</select>
       <select id="xHrs">${[4,8,24,72,168].map(x=>`<option value="${x}"${x===S.horas?" selected":""}>${x<24?x+"h":x===24?"1d":x===72?"3d":"7d"}</option>`).join("")}</select>
@@ -742,8 +742,8 @@ function render(){
   document.getElementById("xFee")?.addEventListener("change",e=>{S.fees=e.target.checked;render()});
   document.getElementById("xBE")?.addEventListener("change",e=>{S.beRatio=+e.target.value;reSimOps();render()});
   document.getElementById("xSim")?.addEventListener("change",e=>{S.maxSim=+e.target.value;render()});
-  document.querySelectorAll("[data-tab]").forEach(b=>b.addEventListener("click",e=>{S.tab=e.target.dataset.tab;render()}));
   document.getElementById("prevOp")?.addEventListener("click",()=>{if(S.selOp>0){S.selOp--;render()}});
+  document.querySelectorAll("[data-tab]").forEach(b=>b.addEventListener("click",e=>{S.tab=e.target.dataset.tab;render()}));
   document.getElementById("nextOp")?.addEventListener("click",()=>{if(S.selOp<S.ops.length-1){S.selOp++;render()}});
   document.querySelectorAll("[data-opi]").forEach(r=>r.addEventListener("click",()=>{const i=+r.dataset.opi;S.selOp=i;S.tab="detalle";render();setTimeout(()=>document.getElementById("opD")?.scrollIntoView({behavior:"smooth",block:"start"}),100)}));
 
